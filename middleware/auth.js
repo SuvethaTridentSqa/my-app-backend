@@ -6,12 +6,10 @@ function authenticate(req, res, next) {
   const token =
     req.cookies?.session || req.headers.authorization?.split(" ")[1];
   if (!token) {
-    return res
-      .status(401)
-      .json({
-        message:
-          "Authentication token missing.So Kindly Signin Again and Try Again.",
-      });
+    return res.status(401).json({
+      message:
+        "Authentication token missing.So Kindly Signin Again and Try Again.And When trying AI Chat ,Kindly try with New Chat Option.",
+    });
   }
 
   try {
