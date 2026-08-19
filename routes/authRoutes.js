@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const ActivityLog = require("../models/ActivityLog");
 const { generateCaptcha, verifyCaptcha } = require("../utils/captcha");
+const { verifyTokenWithoutExpiry } = require("../middleware/auth");
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "change_this_secret";
@@ -76,6 +77,46 @@ router.post("/register", async (req, res) => {
   }
 });
 
+router.post("/refresh", (req, res) => {
+  try {
+    const { verifyTokenWithoutExpiry } = require("../middleware/auth");
+    const token =
+      req.cookies?.session || req.headers.authorization?.split(" ")[1];
+
+    if (!token) {
+      return res.status(401).json({
+        code: "MISSING_AUTH",
+        message: "No token provided for refresh.",
+      });
+    }
+
+    const decoded = verifyTokenWithoutExpiry(token);
+    if (!decoded || !decoded.id) {
+      return res.status(401).json({
+        code: "INVALID_AUTH",
+        message: "Invalid token structure. Cannot refresh.",
+      });
+    }
+
+    const freshToken = createSessionToken({
+      _id: decoded.id,
+      email: decoded.email,
+      role: decoded.role,
+    });
+
+    sendToken(res, freshToken);
+    res.json({
+      message: "Token refreshed successfully.",
+      token: freshToken,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to refresh token.",
+      error: error.message,
+    });
+  }
+});
+
 router.post("/login", async (req, res) => {
   try {
     const { email, password, captchaId, captchaAnswer } = req.body;
@@ -118,6 +159,7 @@ router.post("/login", async (req, res) => {
 
     res.json({
       message: "Login successful.",
+      token,
       user: {
         id: user._id,
         email: user.email,
@@ -125,6 +167,7 @@ router.post("/login", async (req, res) => {
         name: user.name,
       },
     });
+    localStorage.setItem("token", token);
   } catch (error) {
     res.status(500).json({ message: "Login failed.", error: error.message });
   }
@@ -178,6 +221,7 @@ router.post("/admin/login", async (req, res) => {
 
     res.json({
       message: "Admin login successful.",
+      token,
       admin: {
         id: user._id,
         role: user.role,

@@ -5,12 +5,18 @@ function titleFromPrompt(prompt) {
 }
 async function getConversations(req, res) {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        code: "INVALID_AUTH",
+        message: "User information missing from request. Please sign in again.",
+      });
+    }
+
     const conversations = await ChatConversation.find({
       user: req.user.id,
     })
       .sort({ updatedAt: -1 })
       .select("title updatedAt createdAt messages");
-
     res.json({ conversations });
   } catch (error) {
     res.status(500).json({
@@ -22,13 +28,18 @@ async function getConversations(req, res) {
 
 async function getConversationById(req, res) {
   try {
-    const { id } = req.params;
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        code: "INVALID_AUTH",
+        message: "User information missing from request. Please sign in again.",
+      });
+    }
 
+    const { id } = req.params;
     const conversation = await ChatConversation.findOne({
       _id: id,
       user: req.user.id,
     });
-
     if (!conversation) {
       return res.status(404).json({
         message: "Conversation not found.",
@@ -46,6 +57,13 @@ async function getConversationById(req, res) {
 
 async function sendChatMessage(req, res) {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        code: "INVALID_AUTH",
+        message: "User information missing from request. Please sign in again.",
+      });
+    }
+
     const {
       prompt,
       conversationId,
@@ -105,7 +123,6 @@ async function sendChatMessage(req, res) {
     });
   } catch (error) {
     console.error("AI chat save failed:", error);
-
     res.status(500).json({
       message: "Failed to save chat.",
       error: error.message,
@@ -137,13 +154,11 @@ async function createConversation(req, res) {
       title: "New Chat",
       messages: [],
     });
-
     res.status(201).json({
       conversation,
     });
   } catch (error) {
     console.error("Create conversation failed:", error);
-
     res.status(500).json({
       message: "Failed to create conversation.",
       error: error.message,

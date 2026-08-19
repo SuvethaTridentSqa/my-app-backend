@@ -4,7 +4,6 @@ const cors = require("cors");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const { authLimiter, generalLimiter } = require("./middleware/rateLimit");
-// const { Client, GatewayIntentBits } = require("discord.js");
 
 require("dotenv").config();
 
@@ -16,14 +15,21 @@ const redirectRoutes = require("./routes/redirectRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 const visualizerRoutes = require("./routes/visualizerRoutes");
-
+const ragRoutes = require("./routes/ragRoutes");
 const app = express();
+const bodyParser = require("body-parser");
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || true, credentials: true }));
 app.use(helmet());
 app.use(cookieParser());
 app.use(express.json());
 app.use(generalLimiter);
+
+// 1. Parse JSON payloads (Content-Type: application/json)
+app.use(bodyParser.json());
+
+// 2. Parse URL-encoded forms (Content-Type: application/x-www-form-urlencoded)
+app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/users", userRoutes);
@@ -33,7 +39,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/u", redirectRoutes);
 app.use("/api/visualizer", visualizerRoutes);
-
+app.use("/api/rag", ragRoutes);
 app.get("/", (req, res) => {
   res.send("API Running");
 });
