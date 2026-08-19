@@ -167,7 +167,6 @@ router.post("/login", async (req, res) => {
         name: user.name,
       },
     });
-    localStorage.setItem("token", token);
   } catch (error) {
     res.status(500).json({ message: "Login failed.", error: error.message });
   }

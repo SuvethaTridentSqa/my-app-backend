@@ -65,7 +65,7 @@ exports.searchSimilarChunks = async ({ embedding, userId, limit = 5 }) => {
     .select("text document metadata chunkIndex embedding")
     .lean();
 
-  console.log(`[RAG] Loaded ${chunks.length} chunks for similarity search.`);
+  // console.log(`[RAG] Loaded ${chunks.length} chunks for similarity search.`);
 
   const results = chunks
     .map((chunk) => {
@@ -83,10 +83,10 @@ exports.searchSimilarChunks = async ({ embedding, userId, limit = 5 }) => {
     .sort((a, b) => b.score - a.score)
     .slice(0, safeLimit);
 
-  console.log(
-    "[RAG] Top similarity scores:",
-    results.map((result) => result.score),
-  );
+  // console.log(
+  //   "[RAG] Top similarity scores:",
+  //   results.map((result) => result.score),
+  // );
 
   return results;
 };
