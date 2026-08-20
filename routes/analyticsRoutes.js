@@ -2,8 +2,8 @@ const express = require("express");
 const Url = require("../models/Url");
 const RedirectEvent = require("../models/RedirectEvent");
 const { authenticate } = require("../middleware/auth");
-
 const router = express.Router();
+const ActivityLog = require("../models/ActivityLog");
 
 function buildAnalytics(events) {
   const totalClicks = events.length;
@@ -24,7 +24,6 @@ function buildAnalytics(events) {
     acc[bucket] = (acc[bucket] || 0) + 1;
     return acc;
   }, {});
-
   return { totalClicks, deviceBreakdown, geography, timeSeries };
 }
 
@@ -34,7 +33,6 @@ router.post("/domain", authenticate, async (req, res) => {
     if (!domain && !url) {
       return res.status(400).json({ message: "Domain or url is required." });
     }
-
     const domainFilter = domain?.trim().toLowerCase();
     let matchRegex = null;
     if (domainFilter) {
@@ -42,7 +40,6 @@ router.post("/domain", authenticate, async (req, res) => {
         `https?://(www\\.)?${domainFilter.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}($|/)", "i"`,
       );
     }
-
     const urls = await Url.find({
       ...(matchRegex ? { originalUrl: matchRegex } : {}),
       ...(url
@@ -54,7 +51,6 @@ router.post("/domain", authenticate, async (req, res) => {
           }
         : {}),
     });
-
     if (!urls.length) {
       return res.json({
         urls: [],
@@ -66,7 +62,6 @@ router.post("/domain", authenticate, async (req, res) => {
         },
       });
     }
-
     const events = await RedirectEvent.find({
       url: { $in: urls.map((item) => item._id) },
     });
@@ -85,11 +80,9 @@ router.get("/dashboard", authenticate, async (req, res) => {
     const urlFilter = req.user.role === "admin" ? {} : { owner: req.user.id };
     const urls = await Url.find(urlFilter, { _id: 1 });
     const urlIds = urls.map((item) => item._id);
-
     const events = await RedirectEvent.find({
       url: { $in: urlIds },
     }).sort({ createdAt: -1 });
-
     const analytics = buildAnalytics(events);
     const clickHistory = events.map((event) => ({
       clickedAt: event.createdAt,
@@ -101,7 +94,6 @@ router.get("/dashboard", authenticate, async (req, res) => {
       referer: event.referer || "direct",
       success: event.success,
     }));
-
     res.json({ analytics, events: clickHistory });
   } catch (error) {
     res.status(500).json({
@@ -119,7 +111,6 @@ function normalizeUrl(value) {
     .replace(/^www\./, "")
     .replace(/\/$/, "");
 }
-
 router.get("/url", authenticate, async (req, res) => {
   try {
     // console.log("RAW SEARCH:", req.query.search);
@@ -148,7 +139,6 @@ router.get("/url", authenticate, async (req, res) => {
         .replace(/^www\./, "")
         .replace(/\/$/, "");
     };
-
     const normalizedSearch = normalizeUrl(search);
     const urls = await Url.find();
     const url = urls.find((item) => {
@@ -157,25 +147,26 @@ router.get("/url", authenticate, async (req, res) => {
         normalizeUrl(item.originalUrl) === normalizedSearch
       );
     });
-    // console.log("Matched URL:", url);
+    await ActivityLog.create({
+      user: req.user._id,
+      type: "usage",
+      action: "url_analytics",
+    });
+    // console.log("URL Analytics activity log added:", url);
     if (!url) {
       return res.status(404).json({
         message: "URL not found.",
       });
     }
-
     if (req.user.role !== "admin" && url.owner.toString() !== req.user.id) {
       return res.status(403).json({
         message: "Access denied.",
       });
     }
-
     const events = await RedirectEvent.find({
       url: url._id,
     }).sort({ createdAt: -1 });
-
     const analytics = buildAnalytics(events);
-
     const clickHistory = events.map((event) => ({
       clickedAt: event.createdAt,
       device: event.device || "unknown",
@@ -185,7 +176,6 @@ router.get("/url", authenticate, async (req, res) => {
       ip: event.ip || "unknown",
       referer: event.referer || "direct",
     }));
-
     res.json({
       url,
       analytics,
@@ -193,7 +183,6 @@ router.get("/url", authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-
     res.status(500).json({
       message: "Failed to load URL analytics.",
       error: error.message,

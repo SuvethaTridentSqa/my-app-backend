@@ -125,7 +125,6 @@ router.post("/login", async (req, res) => {
         .status(400)
         .json({ message: "Email, password, and captcha are required." });
     }
-
     if (!verifyCaptcha(captchaId, captchaAnswer)) {
       return res
         .status(400)
@@ -138,25 +137,20 @@ router.post("/login", async (req, res) => {
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
-
     const matched = await bcrypt.compare(password, user.password);
     if (!matched) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
-
     user.lastLogin = new Date();
     await user.save();
-
     const token = createSessionToken(user);
     sendToken(res, token);
-
     await ActivityLog.create({
       user: user._id,
       type: "login",
-      action: "login",
+      action: user.role === "admin" ? "admin_login" : "user_login",
       metadata: { origin: "user" },
     });
-
     res.json({
       message: "Login successful.",
       token,
@@ -180,13 +174,11 @@ router.post("/admin/login", async (req, res) => {
         .status(400)
         .json({ message: "Email, password, and captcha are required." });
     }
-
     if (!verifyCaptcha(captchaId, captchaAnswer)) {
       return res
         .status(400)
         .json({ message: "Math captcha verification failed." });
     }
-
     const user = await User.findOne({
       email: email.toLowerCase(),
       role: "admin",
@@ -196,20 +188,16 @@ router.post("/admin/login", async (req, res) => {
         .status(401)
         .json({ message: "Admin credentials are invalid." });
     }
-
     const matched = await bcrypt.compare(password, user.password);
     if (!matched) {
       return res
         .status(401)
         .json({ message: "Admin credentials are invalid." });
     }
-
     user.lastLogin = new Date();
     await user.save();
-
     const token = createSessionToken(user);
     sendToken(res, token);
-
     await ActivityLog.create({
       user: user._id,
       role: "admin",
@@ -217,7 +205,6 @@ router.post("/admin/login", async (req, res) => {
       action: "admin_login",
       metadata: { origin: "admin" },
     });
-
     res.json({
       message: "Admin login successful.",
       token,
@@ -237,13 +224,27 @@ router.post("/admin/login", async (req, res) => {
 
 router.post("/logout", async (req, res) => {
   try {
+    await ActivityLog.create({
+      user: req.user.id,
+      role: req.user.role,
+      type: "logout",
+      action: req.user.role === "admin" ? "admin_logout" : "user_logout",
+      metadata: {
+        origin: req.user.role,
+      },
+    });
     res.clearCookie("session", {
       sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
     });
-    res.json({ message: "Logged out successfully." });
+    res.json({
+      message: "Logged out successfully.",
+    });
   } catch (error) {
-    res.status(500).json({ message: "Logout failed.", error: error.message });
+    res.status(500).json({
+      message: "Logout failed.",
+      error: error.message,
+    });
   }
 });
 

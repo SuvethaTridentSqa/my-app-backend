@@ -1,4 +1,6 @@
 const ChatConversation = require("../models/ChatConversation");
+const ActivityLog = require("../models/ActivityLog");
+
 function titleFromPrompt(prompt) {
   const trimmed = prompt.trim();
   return trimmed.length > 40 ? `${trimmed.slice(0, 37)}...` : trimmed;
@@ -63,37 +65,31 @@ async function sendChatMessage(req, res) {
         message: "User information missing from request. Please sign in again.",
       });
     }
-
     const {
       prompt,
       conversationId,
       assistantResponse,
       assistantStatus = "completed",
     } = req.body;
-
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return res.status(400).json({
         message: "Prompt text is required.",
       });
     }
-
     if (!conversationId) {
       return res.status(400).json({
         message: "Conversation ID is required.",
       });
     }
-
     const conversation = await ChatConversation.findOne({
       _id: conversationId,
       user: req.user.id,
     });
-
     if (!conversation) {
       return res.status(404).json({
         message: "Conversation not found.",
       });
     }
-
     conversation.messages.push({
       role: "user",
       content: prompt.trim(),
@@ -108,15 +104,16 @@ async function sendChatMessage(req, res) {
           : "AI failed to generate a response.",
       status: assistantStatus === "failed" ? "failed" : "completed",
     });
-
     if (!conversation.title || conversation.title === "New Chat") {
       conversation.title = titleFromPrompt(prompt);
     }
-
     conversation.updatedAt = new Date();
-
     await conversation.save();
-
+    await ActivityLog.create({
+      user: req.user._id,
+      type: "usage",
+      action: "chat_with_ai",
+    });
     res.status(201).json({
       conversation,
       assistantResponse,
@@ -133,7 +130,6 @@ async function sendChatMessage(req, res) {
 async function getAIHealth(req, res) {
   try {
     const result = await checkAIHealth();
-
     res.json({
       success: true,
       ...result,

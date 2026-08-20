@@ -24,7 +24,6 @@ router.get("/check-alias/:alias", async (req, res) => {
   if (!alias || !validateAlias(alias)) {
     return res.json({ available: false });
   }
-
   const existing = await Url.findOne({ slug: alias });
   res.json({ available: !Boolean(existing) });
 });
@@ -36,13 +35,11 @@ router.post("/", authenticate, async (req, res) => {
     if (!originalUrl) {
       return res.status(400).json({ message: "Original URL is required." });
     }
-
     if (!validateAlias(alias)) {
       return res
         .status(400)
         .json({ message: "Custom alias is invalid or reserved." });
     }
-
     const slug = alias ? alias.trim().toLowerCase() : generateSlug();
     const existingSlug = await Url.findOne({ slug });
     if (existingSlug) {
@@ -50,7 +47,6 @@ router.post("/", authenticate, async (req, res) => {
         message: "Alias already in use. Choose another custom alias.",
       });
     }
-
     const urlData = {
       owner: req.user.id,
       originalUrl: originalUrl.trim(),
@@ -59,15 +55,12 @@ router.post("/", authenticate, async (req, res) => {
       title: title ? title.trim() : "",
       description: description ? description.trim() : "",
     };
-
     if (password) {
       urlData.passwordHash = await bcrypt.hash(password.toString(), 10);
     }
-
     const short = await Url.create(urlData);
     const existingShortUrl = `${BASE_URL.replace(/\/$/, "")}/u/${short.slug}`;
     const qrCode = await QRCode.toDataURL(existingShortUrl);
-
     await ActivityLog.create({
       user: req.user.id,
       type: "usage",
@@ -86,7 +79,13 @@ router.post("/", authenticate, async (req, res) => {
       }),
       300,
     );
-
+    //here add activity log
+    await ActivityLog.create({
+      user: req.user.id,
+      type: "usage",
+      action: "url_alias",
+      metadata: { slug: short.slug, originalUrl: short.originalUrl },
+    });
     res.status(201).json({
       message: "Short URL created.",
       shortUrl: existingShortUrl,
