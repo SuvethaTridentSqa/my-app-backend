@@ -5,7 +5,6 @@ const User = require("../models/User");
 const ActivityLog = require("../models/ActivityLog");
 const { generateCaptcha, verifyCaptcha } = require("../utils/captcha");
 const { verifyTokenWithoutExpiry } = require("../middleware/auth");
-
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "change_this_secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "6h";
@@ -32,8 +31,22 @@ function sendToken(res, token) {
 }
 
 router.get("/captcha", (req, res) => {
-  const captcha = generateCaptcha();
-  res.json({ id: captcha.id, expression: captcha.expression });
+  try {
+    const captcha = generateCaptcha();
+
+    res.status(200).json({
+      success: true,
+      id: captcha.id,
+      expression: captcha.expression,
+    });
+  } catch (error) {
+    console.error("Captcha generation failed:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Unable to generate captcha.",
+    });
+  }
 });
 
 router.post("/register", async (req, res) => {
@@ -79,17 +92,14 @@ router.post("/register", async (req, res) => {
 
 router.post("/refresh", (req, res) => {
   try {
-    const { verifyTokenWithoutExpiry } = require("../middleware/auth");
     const token =
       req.cookies?.session || req.headers.authorization?.split(" ")[1];
-
     if (!token) {
       return res.status(401).json({
         code: "MISSING_AUTH",
         message: "No token provided for refresh.",
       });
     }
-
     const decoded = verifyTokenWithoutExpiry(token);
     if (!decoded || !decoded.id) {
       return res.status(401).json({
@@ -97,13 +107,11 @@ router.post("/refresh", (req, res) => {
         message: "Invalid token structure. Cannot refresh.",
       });
     }
-
     const freshToken = createSessionToken({
       _id: decoded.id,
       email: decoded.email,
       role: decoded.role,
     });
-
     sendToken(res, freshToken);
     res.json({
       message: "Token refreshed successfully.",

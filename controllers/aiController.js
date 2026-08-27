@@ -5,97 +5,88 @@ function titleFromPrompt(prompt) {
   const trimmed = prompt.trim();
   return trimmed.length > 40 ? `${trimmed.slice(0, 37)}...` : trimmed;
 }
-async function getConversations(req, res) {
+async function getConversations(req, res, next) {
   try {
-    if (!req.user || !req.user.id) {
-      return res.status(401).json({
-        code: "INVALID_AUTH",
-        message: "User information missing from request. Please sign in again.",
-      });
-    }
-
-    const conversations = await ChatConversation.find({
-      user: req.user.id,
-    })
-      .sort({ updatedAt: -1 })
-      .select("title updatedAt createdAt messages");
-    res.json({ conversations });
-  } catch (error) {
-    res.status(500).json({
-      message: "Failed to load conversations.",
-      error: error.message,
+    const page = Number(req.query.page) || 1;
+    const limit = Math.min(Number(req.query.limit) || 20, 50);
+    const skip = (page - 1) * limit;
+    const filter = {
+      user: req.user._id,
+    };
+    const [conversations, total] = await Promise.all([
+      ChatConversation.find(filter)
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select("title updatedAt createdAt")
+        .lean(),
+      ChatConversation.countDocuments(filter),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    res.status(200).json({
+      success: true,
+      data: conversations,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
     });
+  } catch (error) {
+    next(error);
   }
 }
 
-async function getConversationById(req, res) {
+async function getConversationById(req, res, next) {
   try {
-    if (!req.user || !req.user.id) {
-      return res.status(401).json({
-        code: "INVALID_AUTH",
-        message: "User information missing from request. Please sign in again.",
-      });
-    }
-
     const { id } = req.params;
     const conversation = await ChatConversation.findOne({
       _id: id,
-      user: req.user.id,
+      user: req.user._id,
     });
     if (!conversation) {
       return res.status(404).json({
+        success: false,
+        code: "CONVERSATION_NOT_FOUND",
         message: "Conversation not found.",
       });
     }
-
-    res.json({ conversation });
-  } catch (error) {
-    res.status(500).json({
-      message: "Failed to load conversation.",
-      error: error.message,
+    return res.status(200).json({
+      success: true,
+      data: conversation,
     });
+  } catch (error) {
+    next(error);
   }
 }
 
-async function sendChatMessage(req, res) {
+async function sendChatMessage(req, res, next) {
   try {
-    if (!req.user || !req.user.id) {
-      return res.status(401).json({
-        code: "INVALID_AUTH",
-        message: "User information missing from request. Please sign in again.",
-      });
-    }
     const {
       prompt,
       conversationId,
       assistantResponse,
       assistantStatus = "completed",
     } = req.body;
-    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
-      return res.status(400).json({
-        message: "Prompt text is required.",
-      });
-    }
-    if (!conversationId) {
-      return res.status(400).json({
-        message: "Conversation ID is required.",
-      });
-    }
     const conversation = await ChatConversation.findOne({
       _id: conversationId,
-      user: req.user.id,
+      user: req.user._id,
     });
     if (!conversation) {
       return res.status(404).json({
+        success: false,
+        code: "CONVERSATION_NOT_FOUND",
         message: "Conversation not found.",
       });
     }
     conversation.messages.push({
       role: "user",
-      content: prompt.trim(),
+      content: prompt,
       status: "completed",
     });
-
     conversation.messages.push({
       role: "assistant",
       content:
@@ -114,51 +105,31 @@ async function sendChatMessage(req, res) {
       type: "usage",
       action: "chat_with_ai",
     });
-    res.status(201).json({
-      conversation,
-      assistantResponse,
-    });
-  } catch (error) {
-    console.error("AI chat save failed:", error);
-    res.status(500).json({
-      message: "Failed to save chat.",
-      error: error.message,
-    });
-  }
-}
-
-async function getAIHealth(req, res) {
-  try {
-    const result = await checkAIHealth();
-    res.json({
+    return res.status(200).json({
       success: true,
-      ...result,
+      data: {
+        conversation,
+        assistantResponse,
+      },
     });
   } catch (error) {
-    res.status(503).json({
-      success: false,
-      message: "AI service unavailable.",
-      error: error.message,
-    });
+    next(error);
   }
 }
 
-async function createConversation(req, res) {
+async function createConversation(req, res, next) {
   try {
     const conversation = await ChatConversation.create({
-      user: req.user.id,
+      user: req.user._id,
       title: "New Chat",
       messages: [],
     });
-    res.status(201).json({
-      conversation,
+    return res.status(201).json({
+      success: true,
+      data: conversation,
     });
   } catch (error) {
-    console.error("Create conversation failed:", error);
-    res.status(500).json({
-      message: "Failed to create conversation.",
-      error: error.message,
-    });
+    next(error);
   }
 }
 

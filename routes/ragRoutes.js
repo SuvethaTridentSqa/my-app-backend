@@ -1,13 +1,20 @@
 const express = require("express");
 const { searchRAG, uploadDocument } = require("../controllers/ragController");
 const { authenticate } = require("../middleware/auth");
+const validate = require("../middleware/validate");
+const {
+  searchRAGValidation,
+  uploadDocumentValidation,
+} = require("../validators/ragValidators");
+
 const router = express.Router();
-
-// console.log("[RAG ROUTES] searchRAG:", typeof searchRAG);
-// console.log("[RAG ROUTES] uploadDocument:", typeof uploadDocument);
-// console.log("[RAG ROUTES] authenticate:", typeof authenticate);
-
-router.post("/search", authenticate, searchRAG);
-router.post("/documents", authenticate, uploadDocument);
+router.post("/search", authenticate, searchRAGValidation, validate, searchRAG);
+router.post(
+  "/documents",
+  authenticate,
+  uploadDocumentValidation,
+  validate,
+  uploadDocument,
+);
 
 module.exports = router;

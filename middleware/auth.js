@@ -1,64 +1,88 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-const JWT_SECRET = process.env.JWT_SECRET || "change_this_secret";
-
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader?.startsWith("Bearer ")
-      ? authHeader.split(" ")[1]
+      ? authHeader.substring(7)
       : req.cookies?.session;
     if (!token) {
       return res.status(401).json({
-        message: "Authentication token missing.",
+        success: false,
+        code: "AUTH_TOKEN_MISSING",
+        message: "Authentication required.",
       });
     }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findById(
-      decoded.id || decoded._id || decoded.userId,
-    ).select("-password");
-
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (error) {
+      if (error.name === "TokenExpiredError") {
+        return res.status(401).json({
+          success: false,
+          code: "TOKEN_EXPIRED",
+          message: "Your session has expired. Please sign in again.",
+        });
+      }
+      return res.status(401).json({
+        success: false,
+        code: "TOKEN_INVALID",
+        message: "Invalid authentication token.",
+      });
+    }
+    const userId = decoded.id || decoded._id || decoded.userId;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        code: "TOKEN_INVALID",
+        message: "Invalid authentication token.",
+      });
+    }
+    const user = await User.findById(userId).select("-password");
     if (!user) {
       return res.status(401).json({
-        message: "User not found or token invalid.",
+        success: false,
+        code: "USER_NOT_FOUND",
+        message: "User associated with this token was not found.",
       });
     }
     req.user = user;
     next();
   } catch (error) {
-    console.error("[AUTH] Authentication failed:", error);
-
-    return res.status(401).json({
-      message:
-        "Invalid or corrupted authentication token. Please sign in again.",
-    });
+    next(error);
   }
+};
+
+const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        code: "NOT_AUTHENTICATED",
+        message: "Authentication required.",
+      });
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        code: "FORBIDDEN",
+        message: "You do not have permission to perform this action.",
+      });
+    }
+    next();
+  };
 };
 
 function verifyTokenWithoutExpiry(token) {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET, {
+    return jwt.verify(token, JWT_SECRET, {
       ignoreExpiration: true,
     });
-
-    return decoded;
-  } catch (error) {
+  } catch {
     return null;
   }
-}
-
-function authorize(...roles) {
-  return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({
-        message: "Insufficient permissions.",
-      });
-    }
-
-    return next();
-  };
 }
 
 module.exports = {
