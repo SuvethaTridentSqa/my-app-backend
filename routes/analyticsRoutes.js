@@ -148,7 +148,7 @@ router.get("/url", authenticate, async (req, res) => {
       );
     });
     await ActivityLog.create({
-      user: req.user._id,
+      user: req.user.id,
       type: "usage",
       action: "url_analytics",
     });

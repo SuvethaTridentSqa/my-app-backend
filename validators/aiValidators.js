@@ -22,7 +22,7 @@ const sendChatValidation = [
     .withMessage("Assistant response is too large."),
   body("assistantStatus")
     .optional()
-    .isIn(["completed", "failed"])
+    .isIn(["pending", "completed", "failed"])
     .withMessage("Invalid assistant status."),
 ];
 

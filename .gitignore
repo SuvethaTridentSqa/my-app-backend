@@ -30,3 +30,7 @@ Thumbs.db
 # Temporary Files
 *.tmp
 *.temp
+
+# Miscellaneous
+FIX_PLAN.md
+FIXES_APPLIED.md

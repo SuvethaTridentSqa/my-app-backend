@@ -43,8 +43,6 @@ app.use(generalLimiter);
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api/users", userRoutes);
-app.use(notFound);
-app.use(errorHandler);
 app.use("/api/urls", urlRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/ai", aiRoutes);
@@ -76,11 +74,14 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
   socket.on("taskUpdated", (data) => {
-    console.log("Task updated:", data);
+    //console.log("Task updated:", data);
     io.emit("taskUpdated", data);
   });
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
+  socket.on("disconnect", (reason) => {
+    console.log("User disconnected:", socket.id, "Reason:", reason);
+  });
+  socket.on("disconnecting", (reason) => {
+    console.log("User disconnecting:", socket.id, "Reason:", reason);
   });
 });
 

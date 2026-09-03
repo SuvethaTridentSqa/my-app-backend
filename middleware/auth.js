@@ -1,56 +1,63 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
-
-const authenticate = async (req, res, next) => {
+const authenticate = (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    const token = authHeader?.startsWith("Bearer ")
-      ? authHeader.substring(7)
-      : req.cookies?.session;
+    // console.log(
+    //   "[AUTH] Authorization header:",
+    //   authHeader ? "present" : "missing",
+    // );
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        message: "Authorization header is missing.",
+      });
+    }
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authorization format.",
+      });
+    }
+    const token = authHeader.substring(7).trim();
     if (!token) {
       return res.status(401).json({
         success: false,
-        code: "AUTH_TOKEN_MISSING",
-        message: "Authentication required.",
+        message: "Authentication token is missing.",
       });
     }
-    let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch (error) {
-      if (error.name === "TokenExpiredError") {
-        return res.status(401).json({
-          success: false,
-          code: "TOKEN_EXPIRED",
-          message: "Your session has expired. Please sign in again.",
-        });
-      }
-      return res.status(401).json({
+    if (!process.env.JWT_SECRET) {
+      // console.error("[AUTH] JWT_SECRET is not configured.");
+      return res.status(500).json({
         success: false,
-        code: "TOKEN_INVALID",
-        message: "Invalid authentication token.",
+        message: "Server authentication configuration error.",
       });
     }
-    const userId = decoded.id || decoded._id || decoded.userId;
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        code: "TOKEN_INVALID",
-        message: "Invalid authentication token.",
-      });
-    }
-    const user = await User.findById(userId).select("-password");
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        code: "USER_NOT_FOUND",
-        message: "User associated with this token was not found.",
-      });
-    }
-    req.user = user;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // console.log("[AUTH] JWT verified:", {
+    //   id: decoded.id,
+    //   email: decoded.email,
+    //   role: decoded.role,
+    // });
+    req.user = decoded;
     next();
   } catch (error) {
-    next(error);
+    // console.error("[AUTH] JWT verification failed:", error.name, error.message);
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication token has expired.",
+      });
+    }
+    if (error.name === "JsonWebTokenError") {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authentication token.",
+      });
+    }
+    return res.status(401).json({
+      success: false,
+      message: "Authentication failed.",
+    });
   }
 };
 
@@ -77,7 +84,7 @@ const authorize = (...roles) => {
 
 function verifyTokenWithoutExpiry(token) {
   try {
-    return jwt.verify(token, JWT_SECRET, {
+    return jwt.verify(token, process.env.JWT_SECRET, {
       ignoreExpiration: true,
     });
   } catch {

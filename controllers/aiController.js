@@ -11,7 +11,7 @@ async function getConversations(req, res, next) {
     const limit = Math.min(Number(req.query.limit) || 20, 50);
     const skip = (page - 1) * limit;
     const filter = {
-      user: req.user._id,
+      user: req.user.id,
     };
     const [conversations, total] = await Promise.all([
       ChatConversation.find(filter)
@@ -45,7 +45,7 @@ async function getConversationById(req, res, next) {
     const { id } = req.params;
     const conversation = await ChatConversation.findOne({
       _id: id,
-      user: req.user._id,
+      user: req.user.id,
     });
     if (!conversation) {
       return res.status(404).json({
@@ -73,7 +73,7 @@ async function sendChatMessage(req, res, next) {
     } = req.body;
     const conversation = await ChatConversation.findOne({
       _id: conversationId,
-      user: req.user._id,
+      user: req.user.id,
     });
     if (!conversation) {
       return res.status(404).json({
@@ -82,26 +82,50 @@ async function sendChatMessage(req, res, next) {
         message: "Conversation not found.",
       });
     }
-    conversation.messages.push({
-      role: "user",
-      content: prompt,
-      status: "completed",
-    });
-    conversation.messages.push({
-      role: "assistant",
-      content:
-        typeof assistantResponse === "string"
-          ? assistantResponse.trim()
-          : "AI failed to generate a response.",
-      status: assistantStatus === "failed" ? "failed" : "completed",
-    });
+    const lastMessage = conversation.messages.at(-1);
+    const responseContent =
+      typeof assistantResponse === "string"
+        ? assistantResponse.trim()
+        : "AI failed to generate a response.";
+
+    if (assistantStatus === "pending") {
+      conversation.messages.push({
+        role: "user",
+        content: prompt,
+        status: "completed",
+      });
+      conversation.messages.push({
+        role: "assistant",
+        content: "AI response pending...",
+        status: "pending",
+      });
+    } else if (
+      lastMessage?.role === "assistant" &&
+      lastMessage.status === "pending"
+    ) {
+      lastMessage.content =
+        responseContent || "AI failed to generate a response.";
+      lastMessage.status =
+        assistantStatus === "failed" ? "failed" : "completed";
+    } else {
+      conversation.messages.push({
+        role: "user",
+        content: prompt,
+        status: "completed",
+      });
+      conversation.messages.push({
+        role: "assistant",
+        content: responseContent || "AI failed to generate a response.",
+        status: assistantStatus === "failed" ? "failed" : "completed",
+      });
+    }
     if (!conversation.title || conversation.title === "New Chat") {
       conversation.title = titleFromPrompt(prompt);
     }
     conversation.updatedAt = new Date();
     await conversation.save();
     await ActivityLog.create({
-      user: req.user._id,
+      user: req.user.id,
       type: "usage",
       action: "chat_with_ai",
     });
@@ -120,7 +144,7 @@ async function sendChatMessage(req, res, next) {
 async function createConversation(req, res, next) {
   try {
     const conversation = await ChatConversation.create({
-      user: req.user._id,
+      user: req.user.id,
       title: "New Chat",
       messages: [],
     });
@@ -133,9 +157,37 @@ async function createConversation(req, res, next) {
   }
 }
 
+const deleteConversation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const conversation = await ChatConversation.findOneAndDelete({
+      _id: id,
+      user: req.user.id,
+    });
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: "Conversation not found.",
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      message: "Conversation deleted successfully.",
+      conversationId: id,
+    });
+  } catch (error) {
+    console.error("[CHAT] Delete conversation error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to delete conversation.",
+    });
+  }
+};
+
 module.exports = {
   getConversations,
   getConversationById,
   sendChatMessage,
   createConversation,
+  deleteConversation,
 };

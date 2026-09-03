@@ -53,14 +53,17 @@ router.post("/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Name, email and password are required." });
+      return res.status(400).json({
+        success: false,
+        message: "Name, email and password are required.",
+      });
     }
 
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) {
-      return res.status(409).json({ message: "Email is already registered." });
+      return res
+        .status(409)
+        .json({ success: false, message: "Email is already registered." });
     }
 
     const user = await User.create({
@@ -80,13 +83,16 @@ router.post("/register", async (req, res) => {
     const token = createSessionToken(user);
     sendToken(res, token);
     res.status(201).json({
+      success: true,
       message: "Registration successful.",
       user: { id: user._id, email: user.email, name: user.name },
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Failed to register user.", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Failed to register user.",
+      error: error.message,
+    });
   }
 });
 
@@ -129,25 +135,30 @@ router.post("/login", async (req, res) => {
   try {
     const { email, password, captchaId, captchaAnswer } = req.body;
     if (!email || !password || !captchaId || captchaAnswer == null) {
-      return res
-        .status(400)
-        .json({ message: "Email, password, and captcha are required." });
+      return res.status(400).json({
+        success: false,
+        message: "Email, password, and captcha are required.",
+      });
     }
     if (!verifyCaptcha(captchaId, captchaAnswer)) {
       return res
         .status(400)
-        .json({ message: "Math captcha verification failed." });
+        .json({ success: false, message: "Math captcha verification failed." });
     }
 
     const user = await User.findOne({ email: email.toLowerCase() }).select(
       "password name email role",
     );
     if (!user) {
-      return res.status(401).json({ message: "Invalid credentials." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid credentials." });
     }
     const matched = await bcrypt.compare(password, user.password);
     if (!matched) {
-      return res.status(401).json({ message: "Invalid credentials." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid credentials." });
     }
     user.lastLogin = new Date();
     await user.save();
@@ -160,6 +171,7 @@ router.post("/login", async (req, res) => {
       metadata: { origin: "user" },
     });
     res.json({
+      success: true,
       message: "Login successful.",
       token,
       user: {
@@ -170,7 +182,9 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: "Login failed.", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Login failed.", error: error.message });
   }
 });
 
@@ -178,14 +192,15 @@ router.post("/admin/login", async (req, res) => {
   try {
     const { email, password, captchaId, captchaAnswer } = req.body;
     if (!email || !password || !captchaId || captchaAnswer == null) {
-      return res
-        .status(400)
-        .json({ message: "Email, password, and captcha are required." });
+      return res.status(400).json({
+        success: false,
+        message: "Email, password, and captcha are required.",
+      });
     }
     if (!verifyCaptcha(captchaId, captchaAnswer)) {
       return res
         .status(400)
-        .json({ message: "Math captcha verification failed." });
+        .json({ success: false, message: "Math captcha verification failed." });
     }
     const user = await User.findOne({
       email: email.toLowerCase(),
@@ -194,13 +209,13 @@ router.post("/admin/login", async (req, res) => {
     if (!user) {
       return res
         .status(401)
-        .json({ message: "Admin credentials are invalid." });
+        .json({ success: false, message: "Admin credentials are invalid." });
     }
     const matched = await bcrypt.compare(password, user.password);
     if (!matched) {
       return res
         .status(401)
-        .json({ message: "Admin credentials are invalid." });
+        .json({ success: false, message: "Admin credentials are invalid." });
     }
     user.lastLogin = new Date();
     await user.save();
@@ -214,6 +229,7 @@ router.post("/admin/login", async (req, res) => {
       metadata: { origin: "admin" },
     });
     res.json({
+      success: true,
       message: "Admin login successful.",
       token,
       admin: {
@@ -224,9 +240,11 @@ router.post("/admin/login", async (req, res) => {
       },
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Admin login failed.", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Admin login failed.",
+      error: error.message,
+    });
   }
 });
 

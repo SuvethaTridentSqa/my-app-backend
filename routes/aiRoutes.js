@@ -8,6 +8,7 @@ const {
   getConversationById,
   sendChatMessage,
   createConversation,
+  deleteConversation,
 } = require("../controllers/aiController");
 
 const {
@@ -55,17 +56,17 @@ router.get(
 );
 
 router.get(
-  "/conversations",
-  conversationListValidation,
-  validate,
-  getConversations,
-);
-
-router.get(
   "/conversations/:id",
   conversationIdValidation,
   validate,
   getConversationById,
+);
+
+router.delete(
+  "/conversations/:id",
+  conversationIdValidation,
+  validate,
+  deleteConversation,
 );
 
 router.post("/conversations", createConversation);
@@ -111,7 +112,6 @@ router.post("/conversations", createConversation);
  *       404:
  *         description: Conversation not found
  */
-router.post("/chat", sendChatValidation, validate, sendChatMessage);
 router.post("/chat", sendChatValidation, validate, sendChatMessage);
 
 module.exports = router;

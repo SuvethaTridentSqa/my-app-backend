@@ -12,7 +12,7 @@ exports.searchRAG = async (req, res, next) => {
     const safeLimit = Math.min(Number(limit) || 5, 20);
     const results = await ragService.searchSimilarChunks({
       embedding,
-      userId: req.user._id,
+      userId: req.user.id,
       limit: safeLimit,
     });
     return res.status(200).json({
@@ -28,7 +28,7 @@ exports.uploadDocument = async (req, res, next) => {
   try {
     const { title, fileName, chunks } = req.body;
     const document = await ragService.createRagDocument({
-      userId: req.user._id,
+      userId: req.user.id,
       title,
       fileName,
       chunks,
