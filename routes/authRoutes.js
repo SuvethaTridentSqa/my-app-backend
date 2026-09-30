@@ -6,8 +6,7 @@ const ActivityLog = require("../models/ActivityLog");
 const { generateCaptcha, verifyCaptcha } = require("../utils/captcha");
 const { verifyTokenWithoutExpiry } = require("../middleware/auth");
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || "change_this_secret";
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "6h";
+const { JWT_SECRET, JWT_EXPIRES_IN } = require("../config/jwt");
 
 function createSessionToken(user) {
   return jwt.sign(
@@ -33,7 +32,6 @@ function sendToken(res, token) {
 router.get("/captcha", (req, res) => {
   try {
     const captcha = generateCaptcha();
-
     res.status(200).json({
       success: true,
       id: captcha.id,
