@@ -1,0 +1,9 @@
+process.env.NODE_ENV = "test";
+process.env.DISABLE_REDIS = "true";
+process.env.MONGO_URI = "mongodb://localhost:27017/test";
+process.env.JWT_SECRET = "test-secret";
+process.env.JWT_EXPIRES_IN = "1h";
+process.env.BENCHMARK_MODEL = "meta-Instruct";
+process.env.HF_TOKEN = "this_is_a_secret_key";
+process.env.HF_PROVIDER = "auto";
+process.env.PORT = 5000;
