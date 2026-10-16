@@ -81,4 +81,14 @@ Create a `.env` file in the backend/project root and add:
 PORT=5000
 DISABLE_REDIS=true
 MONGO_URI=your_mongodb_connection_string
+ACCESS_TOKEN_SECRET=replace_with_a_long_random_secret
+REFRESH_TOKEN_SECRET=replace_with_a_different_long_random_secret
+ACCESS_TOKEN_EXPIRES_IN=15m
+REFRESH_TOKEN_EXPIRES_IN=7d
 ```
+
+`JWT_SECRET` remains a fallback for `ACCESS_TOKEN_SECRET` during migration.
+When `REFRESH_TOKEN_SECRET` is not set, it is derived from `JWT_SECRET` when
+available. Set both token secrets explicitly in deployed environments. The
+legacy `JWT_EXPIRES_IN` setting is replaced by `ACCESS_TOKEN_EXPIRES_IN`; access
+tokens default to 15 minutes and refresh tokens default to 7 days.

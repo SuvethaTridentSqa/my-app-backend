@@ -1,5 +1,4 @@
-const jwt = require("jsonwebtoken");
-const { JWT_SECRET } = require("../config/jwt");
+const { verifyAccessToken } = require("../config/jwt");
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -10,7 +9,7 @@ const authenticate = async (req, res, next) => {
       });
     }
     const token = authHeader.substring(7).trim();
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = verifyAccessToken(token);
     req.user = {
       ...decoded,
       _id: decoded.id,
@@ -52,18 +51,7 @@ const authorize = (...roles) => {
   };
 };
 
-function verifyTokenWithoutExpiry(token) {
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET, {
-      ignoreExpiration: true,
-    });
-  } catch {
-    return null;
-  }
-}
-
 module.exports = {
   authenticate,
   authorize,
-  verifyTokenWithoutExpiry,
 };

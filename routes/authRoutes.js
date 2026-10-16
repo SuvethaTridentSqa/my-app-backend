@@ -1,32 +1,96 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const User = require("../models/User");
 const ActivityLog = require("../models/ActivityLog");
+const RefreshSession = require("../models/RefreshSession");
 const { generateCaptcha, verifyCaptcha } = require("../utils/captcha");
-const { verifyTokenWithoutExpiry } = require("../middleware/auth");
 const router = express.Router();
-const { JWT_SECRET, JWT_EXPIRES_IN } = require("../config/jwt");
+const {
+  createAccessToken,
+  createRefreshToken,
+  verifyAccessToken,
+  verifyRefreshToken,
+} = require("../config/jwt");
 
-function createSessionToken(user) {
-  return jwt.sign(
-    {
-      id: user._id,
-      email: user.email,
-      role: user.role,
-    },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN },
-  );
+const REFRESH_COOKIE_NAME = "refreshToken";
+const REFRESH_REPLAY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const refreshCookieOptions = {
+  httpOnly: true,
+  sameSite: "strict",
+  path: "/api/auth",
+};
+
+function hashToken(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-function sendToken(res, token) {
+function getRefreshExpiry(token) {
+  const decoded = verifyRefreshToken(token);
+  return new Date(decoded.exp * 1000);
+}
+
+function getTokenExpiry(token, verifyToken) {
+  const decoded = verifyToken(token);
+  return new Date(decoded.exp * 1000);
+}
+
+function sendAccessTokenCookie(res, token) {
+  const expiresAt = getTokenExpiry(token, verifyAccessToken);
   return res.cookie("session", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
-    maxAge: 1000 * 60 * 60 * 6,
+    maxAge: Math.max(0, expiresAt.getTime() - Date.now()),
   });
+}
+
+function setRefreshCookie(res, token, expiresAt) {
+  return res.cookie(REFRESH_COOKIE_NAME, token, {
+    ...refreshCookieOptions,
+    secure: process.env.NODE_ENV === "production",
+    maxAge: Math.max(0, expiresAt.getTime() - Date.now()),
+  });
+}
+
+function clearAuthCookies(res) {
+  res.clearCookie("session", {
+    sameSite: "strict",
+    secure: process.env.NODE_ENV === "production",
+  });
+  res.clearCookie(REFRESH_COOKIE_NAME, {
+    ...refreshCookieOptions,
+    secure: process.env.NODE_ENV === "production",
+  });
+}
+
+function createSessionId() {
+  return crypto.randomUUID();
+}
+
+async function issueTokens(user, res, sessionId = createSessionId()) {
+  const claims = {
+    id: user._id,
+    email: user.email,
+    role: user.role,
+    sid: sessionId,
+  };
+  const accessToken = createAccessToken(claims);
+  const refreshToken = createRefreshToken(claims);
+  const expiresAt = getRefreshExpiry(refreshToken);
+
+  await RefreshSession.create({
+    user: user._id,
+    sessionId,
+    tokenHash: hashToken(refreshToken),
+    status: "active",
+    expiresAt,
+    purgeAt: new Date(expiresAt.getTime() + REFRESH_REPLAY_RETENTION_MS),
+  });
+  sendAccessTokenCookie(res, accessToken);
+  setRefreshCookie(res, refreshToken, expiresAt);
+
+  return accessToken;
 }
 
 router.get("/captcha", (req, res) => {
@@ -78,8 +142,7 @@ router.post("/register", async (req, res) => {
       metadata: { email: user.email },
     });
 
-    const token = createSessionToken(user);
-    sendToken(res, token);
+    await issueTokens(user, res);
     res.status(201).json({
       success: true,
       message: "Registration successful.",
@@ -94,37 +157,148 @@ router.post("/register", async (req, res) => {
   }
 });
 
-router.post("/refresh", (req, res) => {
+router.post("/refresh", async (req, res) => {
+  let storedSession;
+  let token;
   try {
-    const token =
-      req.cookies?.session || req.headers.authorization?.split(" ")[1];
+    token = req.cookies?.[REFRESH_COOKIE_NAME];
     if (!token) {
+      clearAuthCookies(res);
       return res.status(401).json({
         code: "MISSING_AUTH",
-        message: "No token provided for refresh.",
+        message: "No refresh token provided.",
       });
     }
-    const decoded = verifyTokenWithoutExpiry(token);
-    if (!decoded || !decoded.id) {
+
+    const oldTokenHash = hashToken(token);
+    storedSession = await RefreshSession.findOne({ tokenHash: oldTokenHash });
+    if (!storedSession) {
+      clearAuthCookies(res);
       return res.status(401).json({
         code: "INVALID_AUTH",
-        message: "Invalid token structure. Cannot refresh.",
+        message: "Invalid refresh token.",
       });
     }
-    const freshToken = createSessionToken({
-      _id: decoded.id,
+
+    if (storedSession.status !== "active") {
+      if (storedSession.status === "rotated") {
+        await RefreshSession.updateMany(
+          { sessionId: storedSession.sessionId, status: "active" },
+          { $set: { status: "revoked", revokedAt: new Date() } },
+        );
+      }
+      clearAuthCookies(res);
+      return res.status(401).json({
+        code: "INVALID_AUTH",
+        message: "Refresh token has already been used or revoked.",
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(token);
+    } catch (error) {
+      if (
+        error.name !== "TokenExpiredError" &&
+        error.name !== "JsonWebTokenError"
+      ) {
+        throw error;
+      }
+      await RefreshSession.updateOne(
+        { _id: storedSession._id, status: "active" },
+        { $set: { status: "revoked", revokedAt: new Date() } },
+      );
+      clearAuthCookies(res);
+      return res.status(401).json({
+        code: "INVALID_AUTH",
+        message: "Refresh token is expired or invalid.",
+      });
+    }
+
+    if (
+      !decoded.id ||
+      decoded.sid !== storedSession.sessionId ||
+      String(decoded.id) !== String(storedSession.user) ||
+      storedSession.expiresAt <= new Date()
+    ) {
+      await RefreshSession.updateOne(
+        { _id: storedSession._id, status: "active" },
+        { $set: { status: "revoked", revokedAt: new Date() } },
+      );
+      clearAuthCookies(res);
+      return res.status(401).json({
+        code: "INVALID_AUTH",
+        message: "Refresh token is expired or invalid.",
+      });
+    }
+
+    const claims = {
+      id: decoded.id,
       email: decoded.email,
       role: decoded.role,
+      sid: storedSession.sessionId,
+    };
+    const accessToken = createAccessToken(claims);
+    const refreshToken = createRefreshToken(claims);
+    const newTokenHash = hashToken(refreshToken);
+    const expiresAt = getRefreshExpiry(refreshToken);
+    const replacement = await RefreshSession.create({
+      user: storedSession.user,
+      sessionId: storedSession.sessionId,
+      tokenHash: newTokenHash,
+      status: "active",
+      expiresAt,
+      purgeAt: new Date(expiresAt.getTime() + REFRESH_REPLAY_RETENTION_MS),
     });
-    sendToken(res, freshToken);
-    res.json({
+    let rotated;
+    try {
+      rotated = await RefreshSession.findOneAndUpdate(
+        {
+          _id: storedSession._id,
+          status: "active",
+          expiresAt: { $gt: new Date() },
+        },
+        {
+          $set: {
+            status: "rotated",
+            lastUsedAt: new Date(),
+            replacedByHash: newTokenHash,
+          },
+        },
+        { new: true },
+      );
+    } catch (error) {
+      await RefreshSession.deleteOne({ _id: replacement._id });
+      throw error;
+    }
+
+    if (!rotated) {
+      await RefreshSession.deleteOne({ _id: replacement._id });
+      await RefreshSession.updateMany(
+        { sessionId: storedSession.sessionId, status: "active" },
+        { $set: { status: "revoked", revokedAt: new Date() } },
+      );
+      clearAuthCookies(res);
+      return res.status(401).json({
+        code: "INVALID_AUTH",
+        message: "Refresh token has already been used or revoked.",
+      });
+    }
+
+    sendAccessTokenCookie(res, accessToken);
+    setRefreshCookie(res, refreshToken, expiresAt);
+    return res.json({
+      success: true,
       message: "Token refreshed successfully.",
-      token: freshToken,
+      token: accessToken,
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("[AUTH] Token refresh failed:", error);
+    if (token) {
+      clearAuthCookies(res);
+    }
+    return res.status(500).json({
       message: "Failed to refresh token.",
-      error: error.message,
     });
   }
 });
@@ -160,8 +334,7 @@ router.post("/login", async (req, res) => {
     }
     user.lastLogin = new Date();
     await user.save();
-    const token = createSessionToken(user);
-    sendToken(res, token);
+    const token = await issueTokens(user, res);
     await ActivityLog.create({
       user: user._id,
       type: "login",
@@ -217,8 +390,7 @@ router.post("/admin/login", async (req, res) => {
     }
     user.lastLogin = new Date();
     await user.save();
-    const token = createSessionToken(user);
-    sendToken(res, token);
+    const token = await issueTokens(user, res);
     await ActivityLog.create({
       user: user._id,
       role: "admin",
@@ -248,26 +420,42 @@ router.post("/admin/login", async (req, res) => {
 
 router.post("/logout", async (req, res) => {
   try {
-    await ActivityLog.create({
-      user: req.user.id,
-      role: req.user.role,
-      type: "logout",
-      action: req.user.role === "admin" ? "admin_logout" : "user_logout",
-      metadata: {
-        origin: req.user.role,
-      },
-    });
-    res.clearCookie("session", {
-      sameSite: "strict",
-      secure: process.env.NODE_ENV === "production",
-    });
-    res.json({
+    const token = req.cookies?.[REFRESH_COOKIE_NAME];
+    if (token) {
+      const session = await RefreshSession.findOne({ tokenHash: hashToken(token) });
+      if (session) {
+        let role = "user";
+        try {
+          role = verifyRefreshToken(token, { ignoreExpiration: true }).role || role;
+        } catch (error) {
+          if (
+            error.name !== "TokenExpiredError" &&
+            error.name !== "JsonWebTokenError"
+          ) {
+            throw error;
+          }
+        }
+        await RefreshSession.updateMany(
+          { sessionId: session.sessionId, status: "active" },
+          { $set: { status: "revoked", revokedAt: new Date() } },
+        );
+        await ActivityLog.create({
+          user: session.user,
+          role,
+          type: "logout",
+          action: role === "admin" ? "admin_logout" : "user_logout",
+          metadata: { origin: role },
+        });
+      }
+    }
+    clearAuthCookies(res);
+    return res.json({
       message: "Logged out successfully.",
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("[AUTH] Logout failed:", error);
+    return res.status(500).json({
       message: "Logout failed.",
-      error: error.message,
     });
   }
 });

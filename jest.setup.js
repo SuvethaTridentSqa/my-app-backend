@@ -1,8 +1,12 @@
 process.env.NODE_ENV = "test";
 process.env.DISABLE_REDIS = "true";
 process.env.MONGO_URI = "mongodb://localhost:27017/test";
-process.env.JWT_SECRET = "test-secret";
-process.env.JWT_EXPIRES_IN = "1h";
+process.env.ACCESS_TOKEN_SECRET = "test-access-secret";
+process.env.REFRESH_TOKEN_SECRET = "test-refresh-secret";
+process.env.ACCESS_TOKEN_EXPIRES_IN = "15m";
+process.env.REFRESH_TOKEN_EXPIRES_IN = "7d";
+process.env.JWT_SECRET = process.env.ACCESS_TOKEN_SECRET;
+process.env.JWT_EXPIRES_IN = process.env.ACCESS_TOKEN_EXPIRES_IN;
 process.env.BENCHMARK_MODEL = "meta-Instruct";
 process.env.HF_TOKEN = "this_is_a_secret_key";
 process.env.HF_PROVIDER = "auto";
