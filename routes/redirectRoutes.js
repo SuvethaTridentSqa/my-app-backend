@@ -30,7 +30,7 @@ function detectDevice(userAgent) {
     return "desktop";
 }
 
-router.get("/:slug", async (req, res) => {
+router.get("/:slug", async (req, res, next) => {
     try {
         const slug = req.params.slug.toLowerCase();
         const cacheKey = `shorturl:${slug}`;
@@ -105,7 +105,7 @@ router.get("/:slug", async (req, res) => {
 
         res.redirect(url.originalUrl);
     } catch (error) {
-        res.status(500).json({ message: "Unable to redirect short URL.", error: error.message });
+        next(error);
     }
 });
 

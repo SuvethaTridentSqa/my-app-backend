@@ -10,7 +10,11 @@ const ALLOWED_MIME_TYPES = [
 
 function fileFilter(req, file, cb) {
   if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-    return cb(new Error("Unsupported file type. Use .txt, .pdf, or .docx."));
+    const error = new Error("Unsupported file type. Use .txt, .pdf, or .docx.");
+    error.status = 400;
+    error.expose = true;
+    error.code = "UNSUPPORTED_FILE_TYPE";
+    return cb(error);
   }
   cb(null, true);
 }

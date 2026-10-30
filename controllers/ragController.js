@@ -2,7 +2,7 @@ const ragService = require("../services/ragService");
 const { extractText } = require("../utils/textExtractor");
 const { chunkText } = require("../utils/chunker");
 
-exports.searchRAG = async (req, res) => {
+exports.searchRAG = async (req, res, next) => {
   try {
     const { query, embedding, limit = 5, documentId } = req.body;
     if (!query && !embedding) {
@@ -28,7 +28,7 @@ exports.searchRAG = async (req, res) => {
   }
 };
 
-exports.uploadDocument = async (req, res) => {
+exports.uploadDocument = async (req, res, next) => {
   try {
     const { title, fileName, chunks } = req.body;
     if (!req.user?._id) {
@@ -69,15 +69,11 @@ exports.uploadDocument = async (req, res) => {
       document,
     });
   } catch (error) {
-    console.error("Error at Creating a document", error);
-    return res.status(500).json({
-      message: "Document indexing failed.",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
-exports.extractDocument = async (req, res) => {
+exports.extractDocument = async (req, res, next) => {
   try {
     if (!req.user?._id) {
       return res.status(401).json({ message: "Authentication required." });
@@ -107,15 +103,11 @@ exports.extractDocument = async (req, res) => {
       chunks,
     });
   } catch (error) {
-    console.error("Document extraction failed:", error.message);
-    return res.status(500).json({
-      message: "Failed to extract document text.",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
-exports.getDocumentFullText = async (req, res) => {
+exports.getDocumentFullText = async (req, res, next) => {
   try {
     if (!req.user?._id) {
       return res.status(401).json({ message: "Authentication required." });
@@ -126,13 +118,11 @@ exports.getDocumentFullText = async (req, res) => {
     });
     return res.status(200).json({ success: true, data: { text } });
   } catch (error) {
-    return res
-      .status(500)
-      .json({ message: "Failed to load document.", error: error.message });
+    next(error);
   }
 };
 
-exports.listDocuments = async (req, res) => {
+exports.listDocuments = async (req, res, next) => {
   try {
     if (!req.user?._id)
       return res.status(401).json({ message: "Authentication required." });
@@ -142,13 +132,11 @@ exports.listDocuments = async (req, res) => {
       .sort({ createdAt: -1 });
     return res.status(200).json({ success: true, data: documents });
   } catch (error) {
-    return res
-      .status(500)
-      .json({ message: "Failed to load documents.", error: error.message });
+    next(error);
   }
 };
 
-exports.deleteDocument = async (req, res) => {
+exports.deleteDocument = async (req, res, next) => {
   try {
     if (!req.user?._id) {
       return res.status(401).json({ message: "Authentication required." });
@@ -165,9 +153,6 @@ exports.deleteDocument = async (req, res) => {
       message: "Document deleted successfully.",
     });
   } catch (error) {
-    return res.status(500).json({
-      message: "Failed to delete document.",
-      error: error.message,
-    });
+    next(error);
   }
 };

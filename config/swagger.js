@@ -12,7 +12,7 @@ const options = {
 
     servers: [
       {
-        url: `http://localhost:${process.env.PORT || 5000}`,
+        url: `http://localhost:${process.env.PORT || 5000}/api/v1`,
       },
     ],
 
@@ -28,18 +28,40 @@ const options = {
       schemas: {
         Error: {
           type: "object",
+          required: ["success", "message", "data", "meta"],
           properties: {
             success: {
               type: "boolean",
               example: false,
             },
-            code: {
-              type: "string",
-              example: "VALIDATION_ERROR",
-            },
             message: {
               type: "string",
               example: "Request validation failed.",
+            },
+            data: {
+              type: "object",
+              nullable: true,
+              example: null,
+            },
+            meta: {
+              type: "object",
+              properties: {
+                code: {
+                  type: "string",
+                  example: "VALIDATION_ERROR",
+                },
+                errors: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      field: { type: "string" },
+                      location: { type: "string" },
+                      message: { type: "string" },
+                    },
+                  },
+                },
+              },
             },
           },
         },

@@ -6,11 +6,13 @@ const validate = (req, res, next) => {
       success: false,
       code: "VALIDATION_ERROR",
       message: "Request validation failed.",
-      errors: errors.array().map((error) => ({
-        field: error.path,
-        location: error.location,
-        message: error.msg,
-      })),
+      meta: {
+        errors: errors.array().map((error) => ({
+          field: error.path,
+          location: error.location,
+          message: error.msg,
+        })),
+      },
     });
   }
   next();

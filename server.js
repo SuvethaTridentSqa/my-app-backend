@@ -8,6 +8,7 @@ const cookieParser = require("cookie-parser");
 const { authLimiter, generalLimiter } = require("./middleware/rateLimit");
 const notFound = require("./middleware/notFound");
 const errorHandler = require("./middleware/errorHandler");
+const responseEnvelope = require("./middleware/responseEnvelope");
 require("dotenv").config();
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
@@ -40,8 +41,17 @@ app.use(
 
 app.use(cookieParser());
 app.use(generalLimiter);
-app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use(responseEnvelope);
+app.use("/api/v1/auth", authLimiter, authRoutes);
+app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/urls", urlRoutes);
+app.use("/api/v1/analytics", analyticsRoutes);
+app.use("/api/v1/ai", aiRoutes);
+app.use("/api/v1/admin", adminRoutes);
+app.use("/api/v1/visualizer", visualizerRoutes);
+app.use("/api/v1/rag", ragRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/urls", urlRoutes);
 app.use("/api/analytics", analyticsRoutes);

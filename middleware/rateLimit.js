@@ -2,8 +2,9 @@ const rateLimit = require("express-rate-limit");
 
 const rateLimitResponse = {
   success: false,
-  code: "RATE_LIMIT_EXCEEDED",
   message: "Too many requests. Please try again later.",
+  data: null,
+  meta: { code: "RATE_LIMIT_EXCEEDED", errors: [] },
 };
 
 const generalLimiter = rateLimit({
@@ -24,14 +25,16 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: {
     success: false,
-    code: "AUTH_RATE_LIMIT_EXCEEDED",
     message: "Too many authentication attempts. Please try again later.",
+    data: null,
+    meta: { code: "AUTH_RATE_LIMIT_EXCEEDED", errors: [] },
   },
   handler: (req, res, next, options) => {
     res.status(options.statusCode).json({
       success: false,
-      code: "AUTH_RATE_LIMIT_EXCEEDED",
       message: "Too many authentication attempts. Please try again later.",
+      data: null,
+      meta: { code: "AUTH_RATE_LIMIT_EXCEEDED", errors: [] },
     });
   },
 });

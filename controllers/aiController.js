@@ -157,7 +157,7 @@ async function createConversation(req, res, next) {
   }
 }
 
-const deleteConversation = async (req, res) => {
+const deleteConversation = async (req, res, next) => {
   try {
     const { id } = req.params;
     const conversation = await ChatConversation.findOneAndDelete({
@@ -176,11 +176,7 @@ const deleteConversation = async (req, res) => {
       conversationId: id,
     });
   } catch (error) {
-    console.error("[CHAT] Delete conversation error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Unable to delete conversation.",
-    });
+    next(error);
   }
 };
 

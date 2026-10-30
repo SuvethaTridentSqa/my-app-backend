@@ -27,7 +27,7 @@ function buildAnalytics(events) {
   return { totalClicks, deviceBreakdown, geography, timeSeries };
 }
 
-router.post("/domain", authenticate, async (req, res) => {
+router.post("/domain", authenticate, async (req, res, next) => {
   try {
     const { domain, url } = req.body;
     if (!domain && !url) {
@@ -68,14 +68,11 @@ router.post("/domain", authenticate, async (req, res) => {
     const analytics = buildAnalytics(events);
     res.json({ urls, analytics });
   } catch (error) {
-    res.status(500).json({
-      message: "Failed to load domain analytics.",
-      error: error.message,
-    });
+    next(error);
   }
 });
 
-router.get("/dashboard", authenticate, async (req, res) => {
+router.get("/dashboard", authenticate, async (req, res, next) => {
   try {
     const urlFilter = req.user.role === "admin" ? {} : { owner: req.user.id };
     const urls = await Url.find(urlFilter, { _id: 1 });
@@ -96,10 +93,7 @@ router.get("/dashboard", authenticate, async (req, res) => {
     }));
     res.json({ analytics, events: clickHistory });
   } catch (error) {
-    res.status(500).json({
-      message: "Failed to load dashboard analytics.",
-      error: error.message,
-    });
+    next(error);
   }
 });
 
@@ -111,7 +105,7 @@ function normalizeUrl(value) {
     .replace(/^www\./, "")
     .replace(/\/$/, "");
 }
-router.get("/url", authenticate, async (req, res) => {
+router.get("/url", authenticate, async (req, res, next) => {
   try {
     // console.log("RAW SEARCH:", req.query.search);
     const allUrls = await Url.find(
@@ -182,11 +176,7 @@ router.get("/url", authenticate, async (req, res) => {
       events: clickHistory,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Failed to load URL analytics.",
-      error: error.message,
-    });
+    next(error);
   }
 });
 

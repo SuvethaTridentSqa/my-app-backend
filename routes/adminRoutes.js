@@ -8,7 +8,7 @@ const router = express.Router();
 
 router.use(authenticate, authorize("admin"));
 
-router.get("/activity", async (req, res) => {
+router.get("/activity", async (req, res, next) => {
   try {
     const activity = await ActivityLog.find()
       .populate("user", "name email")
@@ -17,27 +17,22 @@ router.get("/activity", async (req, res) => {
 
     res.json(activity);
   } catch (error) {
-    res.status(500).json({
-      message: "Unable to load activity log.",
-      error: error.message,
-    });
+    next(error);
   }
 });
 
-router.get("/users", async (req, res) => {
+router.get("/users", async (req, res, next) => {
   try {
     const users = await User.find()
       .select("name email role createdAt lastLogin")
       .sort({ createdAt: -1 });
     res.json(users);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Unable to load user list.", error: error.message });
+    next(error);
   }
 });
 
-router.get("/usage", async (req, res) => {
+router.get("/usage", async (req, res, next) => {
   try {
     const totalUsers = await User.countDocuments();
     const totalUrls = await Url.countDocuments();
@@ -51,25 +46,20 @@ router.get("/usage", async (req, res) => {
 
     res.json({ totalUsers, totalUrls, topUrls, recentActivity });
   } catch (error) {
-    res.status(500).json({
-      message: "Unable to load admin usage metrics.",
-      error: error.message,
-    });
+    next(error);
   }
 });
 
-router.get("/history", async (req, res) => {
+router.get("/history", async (req, res, next) => {
   try {
     const logs = await ActivityLog.find().sort({ createdAt: -1 }).limit(500);
     res.json(logs);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Unable to load usage history.", error: error.message });
+    next(error);
   }
 });
 
-router.get("/features", async (req, res) => {
+router.get("/features", async (req, res, next) => {
   try {
     const features = await ActivityLog.aggregate([
       { $group: { _id: "$action", total: { $sum: 1 } } },
@@ -77,9 +67,7 @@ router.get("/features", async (req, res) => {
     ]);
     res.json({ features });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Unable to load feature usage.", error: error.message });
+    next(error);
   }
 });
 

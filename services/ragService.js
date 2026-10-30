@@ -1,6 +1,7 @@
 const RagChunk = require("../models/RagChunk");
 
 const EMBEDDING_DIMENSIONS = 384;
+exports.EMBEDDING_DIMENSIONS = EMBEDDING_DIMENSIONS;
 
 function cosineSimilarity(vectorA, vectorB) {
   if (

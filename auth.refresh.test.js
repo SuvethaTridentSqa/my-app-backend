@@ -115,6 +115,7 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 app.use("/api/auth", router);
+app.use("/api/v1/auth", router);
 app.get("/api/protected", authenticate, (req, res) => {
   res.json({ userId: req.user.id, role: req.user.role });
 });
@@ -366,6 +367,34 @@ describe("Login refresh-session issuance", () => {
         expect.stringMatching(/^refreshToken=.*;.*HttpOnly;.*Secure/i),
       ]),
     );
+  });
+
+  test("versioned authentication uses a refresh cookie scoped to its prefix", async () => {
+    const user = {
+      _id: "user-1",
+      email: "user@example.com",
+      name: "Example User",
+      role: "user",
+      password: "hashed-password",
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    User.findOne.mockReturnValue({
+      select: jest.fn().mockResolvedValue(user),
+    });
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: "password",
+      captchaId: "captcha-id",
+      captchaAnswer: 1,
+    });
+
+    expect(response.status).toBe(200);
+    expect(
+      response.headers["set-cookie"].find((value) =>
+        value.startsWith("refreshToken="),
+      ),
+    ).toMatch(/Path=\/api\/v1\/auth/i);
   });
 });
 

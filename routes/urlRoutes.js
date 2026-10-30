@@ -7,6 +7,8 @@ const ActivityLog = require("../models/ActivityLog");
 const { authenticate, authorize } = require("../middleware/auth");
 const { generateSlug, isSlugValid } = require("../utils/slug");
 const { getCache, setCache } = require("../utils/redisClient");
+const validate = require("../middleware/validate");
+const { createUrlValidation } = require("../validators/urlValidators");
 
 const router = express.Router();
 const BASE_URL =
@@ -28,7 +30,7 @@ router.get("/check-alias/:alias", async (req, res) => {
   res.json({ available: !Boolean(existing) });
 });
 
-router.post("/", authenticate, async (req, res) => {
+router.post("/", authenticate, createUrlValidation, validate, async (req, res, next) => {
   try {
     const { originalUrl, alias, password, expiresAt, title, description } =
       req.body;
@@ -95,24 +97,20 @@ router.post("/", authenticate, async (req, res) => {
       expiresAt: short.expiresAt,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Failed to create short URL.", error: error.message });
+    next(error);
   }
 });
 
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
     const urls = await Url.find({ owner: req.user.id }).sort({ createdAt: -1 });
     res.json(urls);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Failed to load URLs.", error: error.message });
+    next(error);
   }
 });
 
-router.get("/:slug", authenticate, async (req, res) => {
+router.get("/:slug", authenticate, async (req, res, next) => {
   try {
     const url = await Url.findOne({
       slug: req.params.slug,
@@ -123,13 +121,11 @@ router.get("/:slug", authenticate, async (req, res) => {
     }
     res.json(url);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Unable to fetch URL details.", error: error.message });
+    next(error);
   }
 });
 
-router.get("/:slug/analytics", authenticate, async (req, res) => {
+router.get("/:slug/analytics", authenticate, async (req, res, next) => {
   try {
     // console.log("Requested slug:", req.params.slug);
     const urls = await Url.find(
@@ -212,9 +208,7 @@ router.get("/:slug/analytics", authenticate, async (req, res) => {
       history,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Failed to load analytics.", error: error.message });
+    next(error);
   }
 });
 
@@ -222,7 +216,7 @@ router.get(
   "/:slug/usage",
   authenticate,
   authorize("admin"),
-  async (req, res) => {
+  async (req, res, next) => {
     try {
       const url = await Url.findOne({ slug: req.params.slug });
       if (!url) {
@@ -234,10 +228,7 @@ router.get(
       });
       res.json({ url, events });
     } catch (error) {
-      res.status(500).json({
-        message: "Failed to load usage history.",
-        error: error.message,
-      });
+      next(error);
     }
   },
 );

@@ -21,7 +21,7 @@ const router = express.Router();
 router.use(authenticate);
 /**
  * @swagger
- * /api/ai/conversations:
+ * /ai/conversations:
  *   get:
  *     summary: Get user's conversations
  *     tags:
@@ -72,7 +72,7 @@ router.delete(
 router.post("/conversations", createConversation);
 /**
  * @swagger
- * /api/ai/chat:
+ * /ai/chat:
  *   post:
  *     summary: Send a chat message
  *     tags:

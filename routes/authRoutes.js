@@ -12,6 +12,8 @@ const {
   verifyAccessToken,
   verifyRefreshToken,
 } = require("../config/jwt");
+const { registrationValidation, loginValidation } = require("../validators/authValidators");
+const validate = require("../middleware/validate");
 
 const REFRESH_COOKIE_NAME = "refreshToken";
 const REFRESH_REPLAY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -45,21 +47,23 @@ function sendAccessTokenCookie(res, token) {
   });
 }
 
-function setRefreshCookie(res, token, expiresAt) {
+function setRefreshCookie(res, token, expiresAt, req) {
   return res.cookie(REFRESH_COOKIE_NAME, token, {
     ...refreshCookieOptions,
+    path: req.baseUrl || refreshCookieOptions.path,
     secure: process.env.NODE_ENV === "production",
     maxAge: Math.max(0, expiresAt.getTime() - Date.now()),
   });
 }
 
-function clearAuthCookies(res) {
+function clearAuthCookies(res, req) {
   res.clearCookie("session", {
     sameSite: "strict",
     secure: process.env.NODE_ENV === "production",
   });
   res.clearCookie(REFRESH_COOKIE_NAME, {
     ...refreshCookieOptions,
+    path: req.baseUrl || refreshCookieOptions.path,
     secure: process.env.NODE_ENV === "production",
   });
 }
@@ -68,7 +72,7 @@ function createSessionId() {
   return crypto.randomUUID();
 }
 
-async function issueTokens(user, res, sessionId = createSessionId()) {
+async function issueTokens(user, res, req, sessionId = createSessionId()) {
   const claims = {
     id: user._id,
     email: user.email,
@@ -88,12 +92,12 @@ async function issueTokens(user, res, sessionId = createSessionId()) {
     purgeAt: new Date(expiresAt.getTime() + REFRESH_REPLAY_RETENTION_MS),
   });
   sendAccessTokenCookie(res, accessToken);
-  setRefreshCookie(res, refreshToken, expiresAt);
+  setRefreshCookie(res, refreshToken, expiresAt, req);
 
   return accessToken;
 }
 
-router.get("/captcha", (req, res) => {
+router.get("/captcha", (req, res, next) => {
   try {
     const captcha = generateCaptcha();
     res.status(200).json({
@@ -102,16 +106,11 @@ router.get("/captcha", (req, res) => {
       expression: captcha.expression,
     });
   } catch (error) {
-    console.error("Captcha generation failed:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Unable to generate captcha.",
-    });
+    next(error);
   }
 });
 
-router.post("/register", async (req, res) => {
+router.post("/register", registrationValidation, validate, async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
@@ -142,18 +141,14 @@ router.post("/register", async (req, res) => {
       metadata: { email: user.email },
     });
 
-    await issueTokens(user, res);
+    await issueTokens(user, res, req);
     res.status(201).json({
       success: true,
       message: "Registration successful.",
       user: { id: user._id, email: user.email, name: user.name },
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to register user.",
-      error: error.message,
-    });
+    next(error);
   }
 });
 
@@ -163,7 +158,7 @@ router.post("/refresh", async (req, res) => {
   try {
     token = req.cookies?.[REFRESH_COOKIE_NAME];
     if (!token) {
-      clearAuthCookies(res);
+      clearAuthCookies(res, req);
       return res.status(401).json({
         code: "MISSING_AUTH",
         message: "No refresh token provided.",
@@ -173,7 +168,7 @@ router.post("/refresh", async (req, res) => {
     const oldTokenHash = hashToken(token);
     storedSession = await RefreshSession.findOne({ tokenHash: oldTokenHash });
     if (!storedSession) {
-      clearAuthCookies(res);
+      clearAuthCookies(res, req);
       return res.status(401).json({
         code: "INVALID_AUTH",
         message: "Invalid refresh token.",
@@ -187,7 +182,7 @@ router.post("/refresh", async (req, res) => {
           { $set: { status: "revoked", revokedAt: new Date() } },
         );
       }
-      clearAuthCookies(res);
+      clearAuthCookies(res, req);
       return res.status(401).json({
         code: "INVALID_AUTH",
         message: "Refresh token has already been used or revoked.",
@@ -208,7 +203,7 @@ router.post("/refresh", async (req, res) => {
         { _id: storedSession._id, status: "active" },
         { $set: { status: "revoked", revokedAt: new Date() } },
       );
-      clearAuthCookies(res);
+      clearAuthCookies(res, req);
       return res.status(401).json({
         code: "INVALID_AUTH",
         message: "Refresh token is expired or invalid.",
@@ -225,7 +220,7 @@ router.post("/refresh", async (req, res) => {
         { _id: storedSession._id, status: "active" },
         { $set: { status: "revoked", revokedAt: new Date() } },
       );
-      clearAuthCookies(res);
+      clearAuthCookies(res, req);
       return res.status(401).json({
         code: "INVALID_AUTH",
         message: "Refresh token is expired or invalid.",
@@ -278,7 +273,7 @@ router.post("/refresh", async (req, res) => {
         { sessionId: storedSession.sessionId, status: "active" },
         { $set: { status: "revoked", revokedAt: new Date() } },
       );
-      clearAuthCookies(res);
+      clearAuthCookies(res, req);
       return res.status(401).json({
         code: "INVALID_AUTH",
         message: "Refresh token has already been used or revoked.",
@@ -286,24 +281,21 @@ router.post("/refresh", async (req, res) => {
     }
 
     sendAccessTokenCookie(res, accessToken);
-    setRefreshCookie(res, refreshToken, expiresAt);
+    setRefreshCookie(res, refreshToken, expiresAt, req);
     return res.json({
       success: true,
       message: "Token refreshed successfully.",
       token: accessToken,
     });
   } catch (error) {
-    console.error("[AUTH] Token refresh failed:", error);
     if (token) {
-      clearAuthCookies(res);
+      clearAuthCookies(res, req);
     }
-    return res.status(500).json({
-      message: "Failed to refresh token.",
-    });
+    return next(error);
   }
 });
 
-router.post("/login", async (req, res) => {
+router.post("/login", loginValidation, validate, async (req, res, next) => {
   try {
     const { email, password, captchaId, captchaAnswer } = req.body;
     if (!email || !password || !captchaId || captchaAnswer == null) {
@@ -334,7 +326,7 @@ router.post("/login", async (req, res) => {
     }
     user.lastLogin = new Date();
     await user.save();
-    const token = await issueTokens(user, res);
+    const token = await issueTokens(user, res, req);
     await ActivityLog.create({
       user: user._id,
       type: "login",
@@ -353,13 +345,11 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Login failed.", error: error.message });
+    next(error);
   }
 });
 
-router.post("/admin/login", async (req, res) => {
+router.post("/admin/login", loginValidation, validate, async (req, res, next) => {
   try {
     const { email, password, captchaId, captchaAnswer } = req.body;
     if (!email || !password || !captchaId || captchaAnswer == null) {
@@ -390,7 +380,7 @@ router.post("/admin/login", async (req, res) => {
     }
     user.lastLogin = new Date();
     await user.save();
-    const token = await issueTokens(user, res);
+    const token = await issueTokens(user, res, req);
     await ActivityLog.create({
       user: user._id,
       role: "admin",
@@ -410,15 +400,11 @@ router.post("/admin/login", async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Admin login failed.",
-      error: error.message,
-    });
+    next(error);
   }
 });
 
-router.post("/logout", async (req, res) => {
+router.post("/logout", async (req, res, next) => {
   try {
     const token = req.cookies?.[REFRESH_COOKIE_NAME];
     if (token) {
@@ -448,15 +434,13 @@ router.post("/logout", async (req, res) => {
         });
       }
     }
-    clearAuthCookies(res);
+    clearAuthCookies(res, req);
     return res.json({
       message: "Logged out successfully.",
     });
   } catch (error) {
-    console.error("[AUTH] Logout failed:", error);
-    return res.status(500).json({
-      message: "Logout failed.",
-    });
+    clearAuthCookies(res, req);
+    return next(error);
   }
 });
 

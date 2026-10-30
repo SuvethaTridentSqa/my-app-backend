@@ -2,9 +2,11 @@
 const express = require("express");
 const User = require("../models/User");
 const { authenticate, authorize } = require("../middleware/auth");
+const validate = require("../middleware/validate");
+const { registrationValidation } = require("../validators/authValidators");
 const router = express.Router();
 
-router.post("/", async (req, res) => {
+router.post("/", registrationValidation, validate, async (req, res, next) => {
     try {
         const { name, email, password } = req.body;
         if (!name || !email || !password) {
@@ -26,16 +28,16 @@ router.post("/", async (req, res) => {
 
         res.status(201).json({ id: user._id, name: user.name, email: user.email, role: user.role });
     } catch (error) {
-        res.status(500).json({ message: "Failed to create user.", error: error.message });
+        next(error);
     }
 });
 
-router.get("/", authenticate, authorize("admin"), async (req, res) => {
+router.get("/", authenticate, authorize("admin"), async (req, res, next) => {
     try {
         const users = await User.find().select("name email role createdAt lastLogin");
         res.json(users);
     } catch (error) {
-        res.status(500).json({ message: "Failed to fetch users.", error: error.message });
+        next(error);
     }
 });
 

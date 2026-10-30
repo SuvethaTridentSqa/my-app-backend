@@ -92,3 +92,21 @@ When `REFRESH_TOKEN_SECRET` is not set, it is derived from `JWT_SECRET` when
 available. Set both token secrets explicitly in deployed environments. The
 legacy `JWT_EXPIRES_IN` setting is replaced by `ACCESS_TOKEN_EXPIRES_IN`; access
 tokens default to 15 minutes and refresh tokens default to 7 days.
+
+## API routes and response format
+
+API routes are available under `/api/v1` (for example, `/api/v1/auth/login`,
+`/api/v1/urls`, and `/api/v1/ai/conversations`). The previous `/api/*` routes
+remain mounted temporarily for existing clients and use the same routers and
+handlers. New clients should use `/api/v1`; the legacy aliases can be removed
+in a future breaking release after consumers have migrated. Public short-link
+redirects remain at `/u/:slug`.
+
+JSON responses use `{ success, message, data, meta }`; pagination
+information is returned in `meta`. JSON API errors use
+`{ success: false, message, data: null, meta: { errors: [] } }`. Redirects and
+other non-JSON responses are not wrapped.
+
+Existing endpoint payload fields are now nested under `data`, pagination
+fields formerly returned at the top level are in `meta`, and error codes are
+available as `meta.code`.

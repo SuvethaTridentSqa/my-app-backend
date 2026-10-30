@@ -5,7 +5,7 @@ const { authenticate } = require("../middleware/auth");
 
 const router = express.Router();
 
-router.post("/links", authenticate, async (req, res) => {
+router.post("/links", authenticate, async (req, res, next) => {
   try {
     const { targetUrl } = req.body;
 
@@ -40,10 +40,7 @@ router.post("/links", authenticate, async (req, res) => {
       connections,
     });
   } catch (error) {
-    res.status(500).json({
-      message: "Unable to crawl URL",
-      error: error.message,
-    });
+    next(error);
   }
 });
 
